@@ -1,0 +1,108 @@
+Virtual Hardware
+
+68000
+
+Memory
+------
+RAM at 0 for 512K
+
+Quite how the boot code magically teleports from ROM into RAM is not
+emulated, as it doesn't matter.
+
+IDE
+---
+A "classic" 16bit IDE controller at 00F01000, with registers at 2 byte
+intervals to allow for a 16bit data register
+
+No interrupt
+
+
+"simple" MMU
+------------
+$00F02000 sets the mask bits of the MMU
+$00F02010 sets the root (xor) bits of the MMU
+$00F02020 is a fault flag which is set when the MMU faults, and
+	  cleared by reading it or acking the interrupt
+
+The faulting address is not captured as it's meant to be a simple MMU.
+
+The addressing rules are
+
+Supervisor:	always linear
+User:		physical = (virtual & mask) ^ root
+
+and a fault is raised if the unmasked bits are not all 0 or 1.
+
+IRQ 7	(may change to NMI or bus error when experimenting more, but it's
+	 interesting as an IRQ because that is generic to all CPUs)
+
+Serial Port
+-----------
+$00F03000 read/write byte writes or fetches data
+$00F03010 read - bit 0 indicates character for reading, bit 1 write space
+
+(Need to add a couple of extra ports via pty or similar)
+
+Currently no interrupt, need to add
+
+
+** To implement**
+
+RTC/Timer
+---------
+$00F04000 set the timer rate or disable if 0
+$00F04010 read the current unsigned unix time
+$00F04020 read the current deciseconds value 0-9
+
+IRQ 6, cleared by acking
+
+Framebuffer
+
+Proper CPU clock locking
+
+
+
+Virtual Software
+
+Boot loads block 0 from IDE device 0 to 0x1000 and if 0x1000 contains the
+magic number 15C0DE68 then it jumps to 0x1004 with A6 holding the pointer to
+the service jump table and D0 holding the number of the boot disk. IRQs are off
+and supervisor mode is in force.
+
+The provided services are a jump table off a6
+
+Halt		0
+
+Returns to the boot prompt assuming you didn't trash the low memory
+
+Chrout		1
+
+Output the character in D0
+
+Strout		2
+
+Output the string in A3 (may change to A2 shortly)
+
+Chrin		3
+
+Read the next character into D0, wait if needed
+
+Chrpoll		4
+
+Return D0 bit 0 true for read ready D0 bit 1 true for write ready
+
+Strin		5
+
+Call with A2 as a buffer pointer and D2 as the buffer length including the
+\0 and the routine will do line input handling
+
+DiskRead	6
+
+Read disk block D1 from device D0 into memory at address A0
+
+
+All service routines may trash A0/D0/A1/D1 and the passed arguments. All
+service routines are likely to change! All are intended to be used from
+supervisor mode only
+
+

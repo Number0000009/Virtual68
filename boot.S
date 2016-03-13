@@ -362,6 +362,7 @@ bootit:
 		move.l	#gogogo,a3
 		bsr	strout
 		move.l	#bootservices,a6
+		moveq	#0,d0		; D0 = disk we booted from
 		jmp	$1004		; Entered with A6 as service vector
 
 		; Trap or fault taken
