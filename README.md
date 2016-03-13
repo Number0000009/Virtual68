@@ -8,8 +8,11 @@ along.
 To run
 
 make
+
 ./makeprom
+
 makedisk 1 disk.img	# makedisk is in the IDE repository
+
 ./makehello
 
 ./v68
