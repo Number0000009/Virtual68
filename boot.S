@@ -15,6 +15,7 @@ MMUFAULT	equ	$00F02020
 SERIN		equ	$00F03000
 SEROUT		equ	$00F03000
 SERSTAT		equ	$00F03010
+TIMERIO		equ	$00F04000
 
 MMUIRQ		equ	7
 TIMERIRQ	equ	6
@@ -33,7 +34,7 @@ TIMERIRQ	equ	6
 		long	bomb		; Div 0 (int)
 		long	bomb		; CHK/CHK2
 		long	bomb		; TRAPcc/TRAPV
-		long	bomb		; Privilege violation
+		long	bombp		; Privilege violation
 		long	bomb		; Trace trap
 		long	bomb		; A line
 		long	bomb		; F line
@@ -61,7 +62,7 @@ TIMERIRQ	equ	6
 		long	ignore		; Level 3
 		long	ignore		; Level 4
 		long	ignore		; Level 5
-		long	ignore		; Level 6
+		long	timer		; Level 6
 		long	ignore		; Level 7
 
 		; Traps (32-47)
@@ -313,6 +314,15 @@ sizeit:		clr.l	(a1)
 		tst.l	(a1)+		; it will go FFFFFFFF when we go off
 		beq	sizeit		; the end
 
+		; interrupts on for timers
+		and.w	#$F8FF,sr
+
+		move.l	#namehd0,a3
+		moveq	#0,d0
+		bsr	identify_drive
+		move.l	#namehd1,a3
+		bsr	identify_drive
+
 command:
 		move.l	#prompt,a3
 		bsr	strout
@@ -328,6 +338,44 @@ command:
 		move.l	#badcmd,a3
 		bsr	strout
 		bra	command
+
+;
+;		Identify the drive in D0, on entry A3 is the drive name
+;
+identify_drive:
+		bsr	strout
+
+		; Set up a 30 second timeout exception
+		move.l	#command,a0
+		move.l	a0,-(sp)
+		move.l	sp,timeoutsp
+		move.w	#3000,d1
+		move.w	d1,ticktock
+
+
+		move.l	#$1000,a0
+		moveq	#0,d0
+		bsr	diskidentify
+;l1:		bra	l1
+		clr.w	ticktock	; stop timeouts
+		tst.w	d0
+		beq	identok
+		move.l	#notfound,a3
+		bra	strout
+identok:
+		move.l	(sp)+,a2	; throw away timeout return
+
+		move.l	#$1036,a2	; ident string
+		moveq	#19,d2		; 40 byte space padded
+ideident:
+		move.b	1(a2),d0
+		bsr	chrout
+		move.b	(a2),d0
+		bsr	chrout
+		addq	#2,a2
+		dbra	d2,ideident
+		bsr	newline
+		rts
 
 cmd_boot:
 		;
@@ -363,24 +411,51 @@ bootit:
 		bsr	strout
 		move.l	#bootservices,a6
 		moveq	#0,d0		; D0 = disk we booted from
+		or.w	#$0700,sr	; IRQ off
 		jmp	$1004		; Entered with A6 as service vector
 
 		; Trap or fault taken
+bombp:
+		move.l	#priv,a3
+		bra	bombs
 bomb:
-		move.l #unexpected,a3
-		move.l #SEROUT,a0
-		bsr strout
-halt:		move.l #$8000,sp
-		move.l #hitkey,a3
-		bsr strout
-		bsr chrin
+		move.l	#unexpected,a3
+bombs:		bsr	strout
+halt:		move.l	#$8000,sp
+		move.l	#hitkey,a3
+		bsr	strout
+		bsr	chrin
 cmd_reset:
 		move.l #$8000,sp
 		reset
-		bra boot
+		bra	boot
 
 ignore:		rte
 
+timer:
+		move.w	d0,-(sp)
+		cmp.b	TIMERIO,d0	; clear irq without using a register
+		move.w	ticktock,d0
+		beq	tickon
+		sub.w	#1,d0
+		beq	ticktickboom
+		move.w	d0,ticktock
+tickon:
+		move.w	(sp)+,d0
+		rte
+;
+;		FIXME: this handling is broken....
+;
+ticktickboom:
+		move.w	#bang,4(sp)
+		rte
+
+bang:
+		clr.w	ticktock
+		move.l	timeoutsp,a7
+		move.l	#timeout,a3
+		bsr	strout
+		rts
 ;
 ;		Library Routines
 ;		Trash input registers and A0/D0/A1/D1
@@ -400,6 +475,11 @@ strw1:		btst	#1,10(a0)
 		bra	strout
 strend:		rts
 
+
+newline:
+		move.b	#13,d0
+		bsr	chrout
+		move.b	#10,d0
 ;
 ;		Print character in D0
 ;
@@ -463,10 +543,7 @@ strdel:		cmpa	a2,a3
 		addq	#1,d2
 		sub.l	#1,a2
 		bra	strinl
-strent:		move.b	#13,d0
-		bsr	chrout
-		move.b	#10,d0
-		bsr	chrout
+strent:		bsr	newline
 		clr.b	(a2)
 		move.l	(sp)+,a3
 		rts
@@ -478,10 +555,7 @@ strent:		move.b	#13,d0
 ;	Returns D0 = 0 on success, non zero on error
 ;
 diskload:
-		move.l	#IDEBASE,a1
-diskwait1:		
-		btst #7,15(a1)		; Wait for drive to leave reset
-		bne diskwait1
+		bsr	idenotbusy
 
 		move.b	d1,7(a1)	; disk block n (assumes LBA)
 		ror.l	#8,d1
@@ -491,18 +565,15 @@ diskwait1:
 		ror.l	#8,d1
 		and.b	#$0F,d1
 		tst.w	d0
-		beq disk0sel
+		beq	disk0sel
 		cmp.w	#1,d0
 		bne	diskerr		; No such drive
 		or.b	#$10,d1		; Disk select bit
 disk0sel:
 		or.b	#$E0,d1
 		move.b	d1,13(a1)	; drive 0 E0 / drive 1 F0
-diskwait2:				; Wait for ready
-		btst #0,15(a1)		; Error bit ?
-		bne 	diskerr
-		btst #6,15(a1)
-		beq diskwait2
+
+		bsr	ideready
 
 		move.b	#1,5(a1)	; for one sector only
 		move.b	#$20,15(a1)	; read sector
@@ -511,17 +582,53 @@ diskwait3:				; Wait for DRQ
 		btst #0,15(a1)		; Error bit ?
 		bne 	diskerr
 		btst #3,15(a1)		; DRQ
-		beq diskwait3
+		beq	diskwait3
 
 		move.w	#255,d0
 diskblk:	move.w	(a1),d1		; Copy the bytes
 		move.w	d1,(a0)+
-		dbeq	d0,diskblk
+;		move.l	#SEROUT,a5
+;		move.b  #'D',(a5)
+		dbra	d0,diskblk
 		moveq	#0,d0
 		rts
 diskerr:	moveq	#1,d0
 		rts
 
+idenotbusy:	move.l	#IDEBASE,a1
+idewait1:		
+		btst #7,15(a1)		; Wait for drive to come ready
+		bne idewait1
+		rts
+
+ideready:				; Wait for ready
+		btst #0,15(a1)		; Error bit ?
+		bne 	diskerr
+		btst #6,15(a1)
+		beq ideready
+		rts
+
+;
+;	Identify disk D0 (currently disk must be 0/1) into A0
+;
+;	FIXME: needs timeouts
+;
+;	Returns D0 = 0 on success, non zero on error
+;
+diskidentify:	bsr	idenotbusy
+		moveq	#0,d1
+		tst.w	d0
+		beq	diski0sel
+		cmp.w	#1,d0
+		bne	diskerr		; No such drive
+		or.b	#$10,d1		; Disk select bit
+diski0sel:
+		or.b	#$E0,d1
+		move.b	d1,13(a1)	; drive 0 E0 / drive 1 F0
+		bsr	ideready
+		move.b	#$EC,15(a1)	; identify
+		bra	diskwait3	; transfer as if a sector
+		
 
 
 ;
@@ -534,14 +641,21 @@ bootservices:	jmp	halt
 		jmp	chrpoll
 		jmp	strin
 		jmp	diskload
-		
+
+ticktock:	word	0
+timeoutsp	long	0		
 
 banner:		asciz "68 Boot Services\r\nRevision 0.1 Alpha\r\n\r\nClearing memory\r\n"
 ideload:	asciz "Booting from IDE disk 0\r\n"
 gogogo:		asciz "OK\r\n"
 notboot:	asciz "Not a bootable device\r\n"
 unexpected:	asciz "Unexpected trap: halting\r\n"
+priv:		asciz "Privilege violation\r\n"
 diskfault:	asciz "Disk error\r\n"
 hitkey:		asciz "Hit a key to restart\r\n"
 prompt:		asciz "> "
 badcmd:		asciz "Unknown command\r\n"
+timeout:	asciz "Timed out\r\n"
+namehd0:	asciz "ide0: "
+namehd1:	asciz "ide1: "
+notfound:	asciz "not present\r\n"

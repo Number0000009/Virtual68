@@ -27,6 +27,8 @@ struct ide_controller *ide;
 #define SERIO_OUT	0x00F03000
 #define SERIO_STATUS	0x00F03010
 
+#define TIMER_IO	0x00F04000
+
 #define IRQ_MMU 	7
 #define IRQ_TIMER	6
 
@@ -98,21 +100,19 @@ static void irq_compute(void)
 	int i;
 	if (irq_pending) {
 		for (i = 7; i >= 0; i--) {
-			if (irq_pending < (1 << i)) {
+			if (irq_pending & (1 << i)) {
 				m68k_set_irq(i);
-				break;
+				return;
 			}
 		}
-	}
+	} else
+		m68k_set_irq(0);
 }
 
 int cpu_irq_ack(int level)
 {
 	if (!(irq_pending & (1 << level)))
 		return M68K_INT_ACK_SPURIOUS;
-
-	irq_pending &= ~(1 << level);
-	irq_compute();
 	if (level == IRQ_MMU)
 		return M68K_INT_ACK_AUTOVECTOR;
 	if (level == IRQ_TIMER)
@@ -165,6 +165,10 @@ static unsigned int do_io_readb(unsigned int address)
 		return next_char();
 	case SERIO_STATUS:
 		return check_chario();
+	case TIMER_IO:
+		irq_pending &= ~ (1 << IRQ_TIMER);
+		irq_compute();
+		return 0x00;
 	}
 	/* bus error ? */
 	return 0xFF;
@@ -295,8 +299,11 @@ void cpu_instr_callback(void)
 {
 }
 
+static struct timespec last_time;
+
 static void device_init(void)
 {
+	clock_gettime(CLOCK_MONOTONIC, &last_time);
 	irq_pending = 0;
 	mmu_mask = 0xFFFFFFFF;
 	mmu_root = 0;
@@ -306,6 +313,18 @@ static void device_init(void)
 
 static void device_update(void)
 {
+	struct timespec tv, tmp;
+	unsigned long n;
+	clock_gettime(CLOCK_MONOTONIC, &tv);
+	tmp.tv_sec = tv.tv_sec - last_time.tv_sec;
+	tmp.tv_nsec = tv.tv_nsec - last_time.tv_nsec;
+	/* Difference in hundredths */
+	n = tmp.tv_sec * 100 + tmp.tv_nsec/10000000;
+	if (n) {
+		last_time = tv;
+		irq_pending |= 1 << IRQ_TIMER;
+		irq_compute();
+	}
 }
 
 void cpu_pulse_reset(void)
