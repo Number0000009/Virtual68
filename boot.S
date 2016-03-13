@@ -345,6 +345,7 @@ command:
 identify_drive:
 		bsr	strout
 
+
 		; Set up a 30 second timeout exception
 		move.l	#command,a0
 		move.l	a0,-(sp)
@@ -352,14 +353,14 @@ identify_drive:
 		move.w	#3000,d1
 		move.w	d1,ticktock
 
-
 		move.l	#$1000,a0
 		moveq	#0,d0
 		bsr	diskidentify
-;l1:		bra	l1
+
 		clr.w	ticktock	; stop timeouts
 		tst.w	d0
 		beq	identok
+		move.l  (sp)+,a2
 		move.l	#notfound,a3
 		bra	strout
 identok:
@@ -385,12 +386,20 @@ cmd_boot:
 		move.l	#ideload,a3
 		bsr	strout
 
+		; Set up a 30 second timeout exception
+		move.l	#command,a0
+		move.l	a0,-(sp)
+		move.l	sp,timeoutsp
+		move.w	#3000,d1
+		move.w	d1,ticktock
+
 		move.l	#$1000,a0	; Store data at $1000
 		clr.l	d0		; Disk 0
 		clr.l	d1		; Block 0
 
 		bsr	diskload
 
+		move.l	(sp)+,a0
 		tst.w	d0
 		beq	boottime
 		move.l	#diskfault,a3
@@ -447,7 +456,8 @@ tickon:
 ;		FIXME: this handling is broken....
 ;
 ticktickboom:
-		move.w	#bang,4(sp)
+		move.w	(sp)+,d0
+		move.l	#bang,2(sp)
 		rte
 
 bang:
