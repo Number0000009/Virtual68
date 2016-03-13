@@ -452,8 +452,9 @@ timer:
 tickon:
 		move.w	(sp)+,d0
 		rte
+
 ;
-;		FIXME: this handling is broken....
+;	Return from the trap to our recovery routine
 ;
 ticktickboom:
 		move.w	(sp)+,d0
