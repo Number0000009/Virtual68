@@ -253,8 +253,13 @@ unsigned int cpu_read_long_dasm(unsigned int address)
 
 void cpu_write_byte(unsigned int address, unsigned int value)
 {
-	if (!(fc & 4))
+	if (!(fc & 4)) {
 		address = translate(address);
+		if (vaddress < 0x1000) {
+			printf("WFAULT %x %x\n", vaddress, value & 0xFF);
+			return;
+		}
+	}
 	if (address < sizeof(ram))
 		ram[address] = value;
 	else if (address >= IOBASE)
@@ -267,10 +272,13 @@ void cpu_write_word(unsigned int address, unsigned int value)
 	unsigned int vaddress = address;
 	/* We can do this as one because we know the address is even
 	   aligned so the two bytes translate adjacent */
-	if (!(fc & 4))
+	if (!(fc & 4)) {
 		vaddress = translate(vaddress);
-//	if (vaddress >= 0x1000 && vaddress <= 0x2000)
-//		printf("WW %x %x\n", vaddress, value & 0xFFFF);
+		if (vaddress < 0x1000) {
+			printf("WFAULT %x %x\n", vaddress, value & 0xFFFF);
+			return;
+		}
+	}
 	if (vaddress < sizeof(ram) - 1) {
 		WRITE_WORD(ram, vaddress, value);
 	} else 	if (address >= IOIDE_START && address <= IOIDE_END)
