@@ -255,8 +255,8 @@ void cpu_write_byte(unsigned int address, unsigned int value)
 {
 	if (!(fc & 4)) {
 		address = translate(address);
-		if (vaddress < 0x1000) {
-			printf("WFAULT %x %x\n", vaddress, value & 0xFF);
+		if (address < 0x1000) {
+			printf("WFAULT %x %x\n", address, value & 0xFF);
 			return;
 		}
 	}
