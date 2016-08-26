@@ -24,7 +24,7 @@ TIMERIRQ	equ	6
 ; Vectors at address 0
 
 		; Boot vectors (0,1)
-		long	$00008000	; Boot SP
+		long	$00000ffe	; Boot SP
 		long	boot		; Boot PC
 
 		; System exceptions (2-15)
@@ -320,6 +320,7 @@ sizeit:		clr.l	(a1)
 		move.l	#namehd0,a3
 		moveq	#0,d0
 		bsr	identify_drive
+		moveq	#1,d0
 		move.l	#namehd1,a3
 		bsr	identify_drive
 
@@ -343,7 +344,9 @@ command:
 ;		Identify the drive in D0, on entry A3 is the drive name
 ;
 identify_drive:
+		move.l	d0,-(sp)
 		bsr	strout
+		move.l	(sp)+,d0
 
 
 		; Set up a 30 second timeout exception
@@ -354,7 +357,6 @@ identify_drive:
 		move.w	d1,ticktock
 
 		move.l	#$1000,a0
-		moveq	#0,d0
 		bsr	diskidentify
 
 		clr.w	ticktock	; stop timeouts
@@ -430,7 +432,7 @@ bombp:
 bomb:
 		move.l	#unexpected,a3
 bombs:		bsr	strout
-halt:		move.l	#$8000,sp
+halt:		move.l	#$0ffe,sp
 		move.l	#hitkey,a3
 		bsr	strout
 		bsr	chrin
@@ -566,7 +568,23 @@ strent:		bsr	newline
 ;	Returns D0 = 0 on success, non zero on error
 ;
 diskload:
+		move.l	d0,-(sp)
 		bsr	idenotbusy
+		move.l	(sp)+,d0
+		tst.w	d0
+		beq	disk0sel
+		cmp.w	#1,d0
+		bne	diskerr		; No such drive
+		move.b	#$F0,d0		; Disk select bit
+		bra	disk1sel
+disk0sel:
+		move.b	#$E0,d0
+disk1sel:
+		move.b	d0,13(a1)	; drive 0 E0 / drive 1 F0
+
+		move.b	d0,-(sp)
+		bsr	ideready
+		move.b	(sp)+,d0
 
 		move.b	d1,7(a1)	; disk block n (assumes LBA)
 		ror.l	#8,d1
@@ -575,16 +593,7 @@ diskload:
 		move.b	d1,11(a1)
 		ror.l	#8,d1
 		and.b	#$0F,d1
-		tst.w	d0
-		beq	disk0sel
-		cmp.w	#1,d0
-		bne	diskerr		; No such drive
-		or.b	#$10,d1		; Disk select bit
-disk0sel:
-		or.b	#$E0,d1
-		move.b	d1,13(a1)	; drive 0 E0 / drive 1 F0
-
-		bsr	ideready
+		or.b	d0,d1
 
 		move.b	#1,5(a1)	; for one sector only
 		move.b	#$20,15(a1)	; read sector
@@ -607,16 +616,23 @@ diskerr:	moveq	#1,d0
 		rts
 
 idenotbusy:	move.l	#IDEBASE,a1
+		move.w	#20000,d2
 idewait1:		
 		btst #7,15(a1)		; Wait for drive to come ready
+		beq idewait_over
+		sub.w #1,d2
 		bne idewait1
-		rts
+idewait_over:	rts
 
 ideready:				; Wait for ready
+		move.w	#20000,d2
+ideready_l:
 		btst #0,15(a1)		; Error bit ?
-		bne 	diskerr
+		bne diskerr
 		btst #6,15(a1)
-		beq ideready
+		bne idewait_over
+		sub.w #1,d2
+		bne ideready_l
 		rts
 
 ;
@@ -627,6 +643,8 @@ ideready:				; Wait for ready
 ;	Returns D0 = 0 on success, non zero on error
 ;
 diskidentify:	bsr	idenotbusy
+		tst.w	d2
+		beq	selfail
 		moveq	#0,d1
 		tst.w	d0
 		beq	diski0sel
@@ -637,9 +655,13 @@ diski0sel:
 		or.b	#$E0,d1
 		move.b	d1,13(a1)	; drive 0 E0 / drive 1 F0
 		bsr	ideready
+		tst.w	d2
+		beq	selfail
 		move.b	#$EC,15(a1)	; identify
 		bra	diskwait3	; transfer as if a sector
-		
+selfail:
+		moveq	#1,d0
+		rts
 
 
 ;
