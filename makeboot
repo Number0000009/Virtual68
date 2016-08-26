@@ -1,0 +1,5 @@
+#!/bin/sh
+m68k-linux-gnu-gcc -Wl,-Ttext=0x1000 -nostdlib loader.S
+m68k-linux-gnu-objcopy a.out  -O binary --only-section=.text  a.bin
+dd if=a.bin of=disk.img bs=1024 seek=1 conv=notrunc
+
