@@ -128,7 +128,8 @@ static void ide_xlate_errno(struct ide_taskfile *t, int len)
 
 static void ide_fault(struct ide_drive *d, const char *p)
 {
-  fprintf(stderr, "ide: %s: %s\n", d->controller->name, p);
+  fprintf(stderr, "ide: %s: %d: %s\n", d->controller->name,
+			(int)(d - d->controller->drive), p);
 }
 
 /* Disk translation */
@@ -287,7 +288,7 @@ static void cmd_readsectors_complete(struct ide_taskfile *tf)
   tf->status |= ST_DRQ;
   /* 0 = 256 sectors */
   d->length = tf->count ? tf->count : 256;
-/*  fprintf(stderr, "READ %d SECTORS @ %ld\n", d->length, d->offset); */
+/*  fprintf(stderr, "READ %d SECTORS @ %ld\n", d->length, d->offset);  */
   if (d->offset == -1 ||  lseek(d->fd, 512 * d->offset, SEEK_SET) == -1) {
     tf->status |= ST_ERR;
     tf->error |= ERR_IDNF;
@@ -598,7 +599,7 @@ void ide_write8(struct ide_controller *c, uint8_t r, uint8_t v)
       return;
     }
     /* Not clear this is the right emulation */
-    if (d->present == 0) {
+    if (d->present == 0 && r != ide_lba_top) {
       ide_fault(d, "not present");
       return;
     }
