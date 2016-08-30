@@ -418,6 +418,7 @@ boottime:
 		bsr	strout
 		bra	halt
 bootit:
+		clr.b	TIMERIO
 		move.l	#gogogo,a3
 		bsr	strout
 		move.l	#bootservices,a6

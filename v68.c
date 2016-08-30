@@ -15,6 +15,8 @@ static uint8_t ram[512 * 1024];
 
 struct ide_controller *ide;
 
+uint8_t timer_v = 1;
+
 #define IOBASE		0x00F00000
 #define IOIDE_START	0x00F01000
 #define IOIDE_END	0x00F0100F
@@ -201,6 +203,9 @@ static void do_io_writeb(unsigned int address, unsigned int value)
 	case SERIO_OUT:
 		char_out(value);
 		break;
+	case TIMER_IO:
+		timer_v = value;
+		break;
 	default: ;
 		/* bus error ? */
 	}
@@ -328,7 +333,7 @@ static void device_update(void)
 	tmp.tv_nsec = tv.tv_nsec - last_time.tv_nsec;
 	/* Difference in hundredths */
 	n = tmp.tv_sec * 100 + tmp.tv_nsec/10000000;
-	if (n) {
+	if (timer_v && n >= timer_v) {
 		last_time = tv;
 		irq_pending |= 1 << IRQ_TIMER;
 		irq_compute();
