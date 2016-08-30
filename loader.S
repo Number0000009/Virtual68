@@ -37,7 +37,7 @@ diskloop:
 	bne	notboot
 	movea	#ok,a3
 	jsr	8(a6)
-	jmp	$2000
+	jmp	$2004
 
 failload:
 	movea	#failmsg,a3
