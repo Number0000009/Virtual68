@@ -51,7 +51,7 @@ Currently no interrupt, need to add
 RTC/Timer
 ---------
 $00F04000 set the timer rate or disable if 0
-$00F04010 read the current unsigned unix time
+$00F04010-7 read the current unsigned unix time (64bit hi->lo)
 $00F04020 read the current deciseconds value 0-9
 
 IRQ 6, cleared by acking

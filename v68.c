@@ -150,6 +150,12 @@ static unsigned int do_io_readb(unsigned int address)
 	if (address >= IOIDE_START && address <= IOIDE_END)
 		return ide_read8(ide, (address - IOIDE_START) / 2);
 
+	if (address >= TIMER_IO + 0x10 && address <= TIMER_IO + 0x13) {
+		time_t t;
+		time(&t);
+		t >>= ((TIMER_IO + 0x17 - address) * 8);
+		return t;
+	}
 	switch(address) {
 	case MMU_MASK:
 		return mmu_mask >> 20;
@@ -171,6 +177,12 @@ static unsigned int do_io_readb(unsigned int address)
 		irq_pending &= ~ (1 << IRQ_TIMER);
 		irq_compute();
 		return 0x00;
+	case TIMER_IO+0x20:
+	{
+		struct timeval tv;
+		gettimeofday(&tv, NULL);
+		return tv.tv_usec/100000;
+	}
 	}
 	/* bus error ? */
 	return 0xFF;
