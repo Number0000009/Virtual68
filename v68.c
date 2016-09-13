@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include "v68.h"
 #include "m68k.h"
+#include "m68kcpu.h"
 #include "ide.h"
 
 
@@ -82,8 +83,10 @@ static unsigned int check_chario(void)
 static unsigned int next_char(void)
 {
 	char c;
-	if (read(0, &c, 1) != 1)
+	if (read(0, &c, 1) != 1) {
+		printf("(tty read without ready byte)\n");
 		return 0xFF;
+	}
 	return c;
 }
 
@@ -233,7 +236,7 @@ unsigned int cpu_read_byte(unsigned int address)
 	if (address >= IOBASE)
 		return do_io_readb(address);
 	/* Bus error ?? */
-//	printf("BUS %d\n", address);
+	printf("%x: BUS %d\n", REG_PC, address);
 	return 0xFF;
 }
 
@@ -281,7 +284,8 @@ void cpu_write_byte(unsigned int address, unsigned int value)
 		ram[address] = value;
 	else if (address >= IOBASE)
 		do_io_writeb(address, (value & 0xFF));
-	/* else Bus error ? */
+	else
+		printf("%x: BUS %d\n", REG_PC, address);
 }
 
 void cpu_write_word(unsigned int address, unsigned int value)
@@ -292,13 +296,13 @@ void cpu_write_word(unsigned int address, unsigned int value)
 	if (!(fc & 4)) {
 		vaddress = translate(vaddress);
 		if (vaddress < 0x1000) {
-			printf("WFAULT %x %x\n", vaddress, value & 0xFFFF);
+			printf("%x: WFAULT %x %x\n", REG_PC, vaddress, value & 0xFFFF);
 			return;
 		}
 	}
 	if (vaddress < sizeof(ram) - 1) {
 		WRITE_WORD(ram, vaddress, value);
-	} else 	if (address >= IOIDE_START && address <= IOIDE_END)
+	} else if (address >= IOIDE_START && address <= IOIDE_END)
 		ide_write16(ide, (address - IOIDE_START) / 2, value);
 	else {
 		/* Corner cases */
