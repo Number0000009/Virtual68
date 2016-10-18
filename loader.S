@@ -18,7 +18,7 @@ go:
 	movea	#initmsg,a3
 	jsr	8(a6)		; string out
 	moveq	#0,d0		; disk 0
-	move.l	#32770,d1	; block number (hack for testing)
+	move.l	#1,d1		; block number (after partitions)
 	move.b	#$80,d2		; count	(64K)
 	move	#$2000,a0	; load address (after PROM stack)
 diskloop:
