@@ -398,7 +398,7 @@ int main(int argc, char* argv[])
 	m68k_init();
 	m68k_set_cpu_type(M68K_CPU_TYPE_68000);
 
-	fd = open("disk.img", O_RDONLY);
+	fd = open("disk.img", O_RDWR);
 	if (fd == -1) {
 		perror("disk.img");
 		exit(1);
