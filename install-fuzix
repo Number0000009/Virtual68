@@ -1,1 +1,1 @@
-dd if=/tmp/fuzix.bin of=disk.img bs=512 seek=32772 conv=notrunc
+dd if=/tmp/fuzix.bin of=disk.img bs=512 seek=3 conv=notrunc
