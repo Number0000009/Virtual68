@@ -1,0 +1,2 @@
+# Drop the partition onto the second partition entry
+dd if=/tmp/68k.fs of=disk.img bs=512 seek=10242 conv=notrunc
