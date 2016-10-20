@@ -311,6 +311,7 @@ boot:
 		move.l	#$1000,a1
 		moveq	#0,d1
 sizeit:		clr.l	(a1)
+		move.l  0,d0
 		tst.l	(a1)+		; it will go FFFFFFFF when we go off
 		beq	sizeit		; the end
 
@@ -461,6 +462,7 @@ tickon:
 ;
 ticktickboom:
 		move.w	(sp)+,d0
+		clr.w	(sp)
 		move.l	#bang,2(sp)
 		rte
 
