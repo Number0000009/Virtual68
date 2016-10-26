@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <string.h>
 #include <time.h>
 #include <sys/time.h>
 #include <sys/select.h>
@@ -12,11 +13,12 @@
 #include "ide.h"
 
 
+static int logging = 0;
 static uint8_t ram[512 * 1024];
-
-struct ide_controller *ide;
-
-uint8_t timer_v = 1;
+static struct ide_controller *ide;
+static uint8_t timer_v = 1;
+static uint32_t low;
+static uint8_t fc;
 
 #define IOBASE		0x00F00000
 #define IOIDE_START	0x00F01000
@@ -52,7 +54,6 @@ uint8_t timer_v = 1;
 			(BASE)[(ADDR)+2] = ((VAL)>>8)&0xff; \
 			(BASE)[(ADDR)+3] = (VAL)&0xff 
 
-uint8_t fc;
 
 /* Simple polled serial port */
 
@@ -128,20 +129,54 @@ int cpu_irq_ack(int level)
 /* Minimal MMU */
 
 static uint32_t mmu_mask, mmu_root, mmu_fault;
+static int mmu_type;
 
-static unsigned int translate(unsigned int addr)
+static void mmu_trap(uint32_t addr, int is_wr)
+{
+	static const char *names[] = {"Read", "Write" };
+
+	fprintf(stderr, "%s fault 0x%08X at 0x%08X\n",
+		names[is_wr], addr, REG_PC);
+	/* bus_error */
+	if (mmu_fault == 0) {
+		mmu_fault = 1;
+		irq_pending |= 1 << IRQ_MMU;
+		irq_compute();
+	}
+}
+
+static unsigned int translate(unsigned int addr, unsigned int is_wr)
 {
 	unsigned int pa = (addr & mmu_mask) ^ mmu_root;
-	if ((addr & ~mmu_mask) && (addr & ~mmu_mask) != ~mmu_mask) {
-		/* bus_error */
-		if (mmu_fault == 0) {
-			mmu_fault = 1;
-			irq_pending |= 1 << IRQ_MMU;
-			irq_compute();
-		}
-		return 0xFFFFFFFF;
+	switch (mmu_type) {
+		/* Simple limits */
+		case 0:
+		default:
+			if (low && (addr < low || addr > sizeof(ram))) {
+				if (is_wr)
+					mmu_trap(addr, is_wr);
+				else
+					fprintf(stderr, "Stray read 0x%08X at 0x%08X\n",
+						addr, REG_PC);
+				return 0xFFFFFFFF;
+			}
+			return addr;
+		/* Proposed Atari MMU */
+		case 1:
+			if ((addr & ~mmu_mask) && (addr & ~mmu_mask) != ~mmu_mask) {
+				mmu_trap(addr, is_wr);
+				return 0xFFFFFFFF;
+			}
+			return pa;
+		/* Base / Limit */
+		case 2:
+			addr += mmu_root;
+			if (addr >= mmu_mask) {
+				mmu_trap(addr, is_wr);
+				return 0xFFFFFFFF;
+			}
+			return addr;
 	}
-	return pa;
 }
 
 /* CPU bus decodes */
@@ -171,6 +206,8 @@ static unsigned int do_io_readb(unsigned int address)
 	case MMU_FAULT:
 		r = mmu_fault;
 		mmu_fault = 0;
+		irq_pending &= ~ (1 << IRQ_MMU);
+		irq_compute();
 		return r;
 	case SERIO_IN:
 		return next_char();
@@ -230,7 +267,8 @@ static void do_io_writeb(unsigned int address, unsigned int value)
 unsigned int cpu_read_byte(unsigned int address)
 {
 	if (!(fc & 4))
-		address = translate(address);
+		address = translate(address, 0);
+
 	if (address < sizeof(ram))
 		return ram[address];
 	if (address >= IOBASE)
@@ -246,9 +284,15 @@ unsigned int cpu_read_word(unsigned int address)
 	/* We can do this as one because we know the address is even
 	   aligned so the two bytes translate adjacent */
 	if (!(fc & 4))
-		vaddress = translate(vaddress);
-	if (vaddress < sizeof(ram) - 1)
+		vaddress = translate(vaddress, 0);
+
+	if (vaddress < sizeof(ram) - 1) {
+		if (logging) {
+			fprintf(stderr, "RW %x/%x ", address, address - 0x20048);
+			fprintf(stderr,"=%x\n", READ_WORD(ram, vaddress));
+		}
 		return READ_WORD(ram, vaddress);
+	}
 	if (address >= IOIDE_START && address <= IOIDE_END)
 		return ide_read16(ide, (address - IOIDE_START) / 2);
 	/* Corner cases */
@@ -262,7 +306,6 @@ unsigned int cpu_read_word_dasm(unsigned int address)
 
 unsigned int cpu_read_long(unsigned int address)
 {
-//	printf("RL %x\n", address);
 	return (cpu_read_word(address) << 16) | cpu_read_word(address + 2);
 }
 
@@ -273,13 +316,8 @@ unsigned int cpu_read_long_dasm(unsigned int address)
 
 void cpu_write_byte(unsigned int address, unsigned int value)
 {
-	if (!(fc & 4)) {
-		address = translate(address);
-		if (address < 0x1000) {
-			printf("WFAULT %x %x\n", address, value & 0xFF);
-			return;
-		}
-	}
+	if (!(fc & 4))
+		address = translate(address, 1);
 	if (address < sizeof(ram))
 		ram[address] = value;
 	else if (address >= IOBASE)
@@ -294,9 +332,10 @@ void cpu_write_word(unsigned int address, unsigned int value)
 	/* We can do this as one because we know the address is even
 	   aligned so the two bytes translate adjacent */
 	if (!(fc & 4)) {
-		vaddress = translate(vaddress);
-		if (vaddress < 0x1000) {
-			printf("%x: WFAULT %x %x\n", REG_PC, vaddress, value & 0xFFFF);
+		vaddress = translate(vaddress, 1);
+		if (low && (address < low || address > sizeof(ram))) {
+			fprintf(stderr, "Write fault 0x%08X at 0x%08X\n",
+				address, REG_PC);
 			return;
 		}
 	}
@@ -323,7 +362,6 @@ void cpu_write_pd(unsigned int address, unsigned int value)
 	cpu_write_word(address, value >> 16);
 }
 
-
 void cpu_instr_callback(void)
 {
 }
@@ -334,7 +372,10 @@ static void device_init(void)
 {
 	clock_gettime(CLOCK_MONOTONIC, &last_time);
 	irq_pending = 0;
-	mmu_mask = 0xFFFFFFFF;
+	if (mmu_type == 1)
+		mmu_mask = 0xFFFFFFFF;
+	else
+		mmu_mask = 0;
 	mmu_root = 0;
 	mmu_fault = 0;
 	ide_reset_begin(ide);
@@ -356,6 +397,15 @@ static void device_update(void)
 	}
 }
 
+static void take_a_nap(void)
+{
+	struct timespec t;
+	t.tv_sec = 0;
+	t.tv_nsec = 10000000;
+	if (nanosleep(&t, NULL))
+		perror("nanosleep");
+}
+
 void cpu_pulse_reset(void)
 {
 	device_init();
@@ -365,8 +415,22 @@ int main(int argc, char* argv[])
 {
 	int fd;
 
+	if (argc >= 2 && strcmp(argv[1], "-p") == 0) {
+		argv++;
+		low = 0x10000;
+		argc--;
+	} else if (argc >= 2 && strcmp(argv[1], "-l") == 0) {
+		argv++;
+		mmu_type = 2;
+		argc--;
+	} else if (argc >= 2 && strcmp(argv[1], "-a") == 0) {
+		argv++;
+		mmu_type = 1;
+		argc--;
+	}
+
 	if(argc > 2) {
-		printf("Usage: v68 <program file>\n");
+		printf("Usage: v68 [-[p|l|s]] <program file>\n");
 		exit(-1);
 	}
 
@@ -397,6 +461,7 @@ int main(int argc, char* argv[])
 	
 	m68k_init();
 	m68k_set_cpu_type(M68K_CPU_TYPE_68000);
+	m68k_pulse_reset();
 
 	fd = open("disk.img", O_RDWR);
 	if (fd == -1) {
@@ -415,8 +480,13 @@ int main(int argc, char* argv[])
 	m68k_pulse_reset();
 
 	while(1) {
+		/* A 10MHz 68000 should do 100,000 cycles per 1/100th of a
+		   second. We do a blind 0.01 second sleep so we are actually
+		   emulating a bit under 10Mhz - which will do fine for
+		   testing this stuff */
 		m68k_execute(100000);
 		device_update();
+		take_a_nap();
 	}
 }
 
