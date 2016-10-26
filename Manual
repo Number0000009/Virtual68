@@ -17,12 +17,21 @@ intervals to allow for a 16bit data register
 No interrupt
 
 
-"simple" MMU
-------------
+MMU
+---
+
+Three different modes
+
+- Basic - traps user access below a fixed base (64K)
+
+- Atari proposed simple MMU
+
 $00F02000 sets the mask bits of the MMU
 $00F02010 sets the root (xor) bits of the MMU
 $00F02020 is a fault flag which is set when the MMU faults, and
 	  cleared by reading it or acking the interrupt
+
+Low 12 bits are fixed upper bits in register.
 
 The faulting address is not captured as it's meant to be a simple MMU.
 
@@ -33,8 +42,19 @@ User:		physical = (virtual & mask) ^ root
 
 and a fault is raised if the unmasked bits are not all 0 or 1.
 
-IRQ 7	(may change to NMI or bus error when experimenting more, but it's
-	 interesting as an IRQ because that is generic to all CPUs)
+- Classic Base/Limit
+
+$00F02000 sets the limit (after base adjustment)
+$00F02010 sets the base address
+$00F02020 is a fault flag which is set when the MMU faults, and
+	  cleared by reading it or acking the interrupt
+
+Low 12 bits are fixed upper bits in register.
+
+
+MMU faults block the access and report IRQ 7. This may change to NMI or bus
+error when experimenting more, but it's interesting as an IRQ because that
+is generic to all CPUs.
 
 Serial Port
 -----------
@@ -60,6 +80,10 @@ Framebuffer
 
 Proper CPU clock locking
 
+Banked memory (as per N8VEM ECB board) for testing banked memory modes
+(00000000-001FFFFF RAM
+ 00200000-002FFFFF 4MB paged RAM
+ 003F0000-003FFFFF I/O)
 
 
 Virtual Software
