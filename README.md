@@ -1,9 +1,9 @@
 # Virtual68
 A simple 68K virtual platform for FUZIX bring up and similar purposes
 
-We emulate a very simple platform with a single input and output port, and
-an IDE controller. A few other bits like the timer will get added as it goes
-along.
+We emulate a very simple platform with a simple serial interface, IDE hard
+disc, timer, and some optional MMU, low memory trap and banking features
+reflecting those found on some real boards.
 
 To run
 
@@ -29,7 +29,7 @@ There are two reasons for Vrtual68 existing
 2. It contains a software implementation of the proposed ridiculously simple
 MMU that never quite made the Atari ST series(*). One of the goals is to boot
 FUZIX using that MMU and see if it actualy works out, before trying to do the
-same before trying it on an FPGA 68K.
+same on an FPGA 68K.
 
 (*)http://www.dadhacker.com/blog/?p=1383
 
