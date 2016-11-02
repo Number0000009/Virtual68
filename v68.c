@@ -381,7 +381,7 @@ void cpu_write_word(unsigned int address, unsigned int value)
 	}
 	if (vaddress < sizeof(ram) - 1) {
 		WRITE_WORD(ram, vaddress, value);
-	} else if (bank_range(address, 1)) {
+	} else if (bank_range(address, 2)) {
 		WRITE_WORD(bankram[curbank], address - BANK_BASE, value);
 	} else if (address >= IOIDE_START && address <= IOIDE_END)
 		ide_write16(ide, (address - IOIDE_START) / 2, value);
