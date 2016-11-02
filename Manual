@@ -5,6 +5,10 @@ Virtual Hardware
 Memory
 ------
 RAM at 0 for 512K
+Banked RAM at 1MB for 256K	(designed for testing simple fixed MMU
+				 setup equivalents and also the banked
+				 memory option on the N8VEM 68K board)
+
 
 Quite how the boot code magically teleports from ROM into RAM is not
 emulated, as it doesn't matter.
@@ -26,9 +30,9 @@ Three different modes
 
 - Atari proposed simple MMU
 
-$00F02000 sets the mask bits of the MMU
-$00F02010 sets the root (xor) bits of the MMU
-$00F02020 is a fault flag which is set when the MMU faults, and
+$xxF02000 sets the mask bits of the MMU
+$xxF02010 sets the root (xor) bits of the MMU
+$xxF02020 is a fault flag which is set when the MMU faults, and
 	  cleared by reading it or acking the interrupt
 
 Low 12 bits are fixed upper bits in register.
@@ -44,9 +48,9 @@ and a fault is raised if the unmasked bits are not all 0 or 1.
 
 - Classic Base/Limit
 
-$00F02000 sets the limit (after base adjustment)
-$00F02010 sets the base address
-$00F02020 is a fault flag which is set when the MMU faults, and
+$xxF02000 sets the limit (after base adjustment)
+$xxF02010 sets the base address
+$xxF02020 is a fault flag which is set when the MMU faults, and
 	  cleared by reading it or acking the interrupt
 
 Low 12 bits are fixed upper bits in register.
@@ -58,32 +62,40 @@ is generic to all CPUs.
 
 Serial Port
 -----------
-$00F03000 read/write byte writes or fetches data
-$00F03010 read - bit 0 indicates character for reading, bit 1 write space
+$xxF03000 read/write byte writes or fetches data
+$xxF03010 read - bit 0 indicates character for reading, bit 1 write space
 
 (Need to add a couple of extra ports via pty or similar)
 
 Currently no interrupt, need to add
 
 
-** To implement**
-
 RTC/Timer
 ---------
-$00F04000 set the timer rate or disable if 0
-$00F04010-7 read the current unsigned unix time (64bit hi->lo)
-$00F04020 read the current deciseconds value 0-9
+$xxF04000 set the timer rate or disable if 0
+$xxF04010-7 read the current unsigned unix time (64bit hi->lo)
+$xxF04020 read the current deciseconds value 0-9
 
 IRQ 6, cleared by acking
 
+Banked Memory
+-------------
+$xxF05000 get/set the current bank number (0-3)
+
+Note: the emulator core does try to emulate 68000 prefetcing behaviour and
+the like, but trying to do a live switch from bank to bank (ie switching the
+bank under you with PC pointing into the banked memory) hasn't been compared
+to real hardware so be cautious.
+
+
+
+** To implement**
+
+
 Framebuffer
+Character keyboard I/O not line by line
+UART emulation ?
 
-Proper CPU clock locking
-
-Banked memory (as per N8VEM ECB board) for testing banked memory modes
-(00000000-001FFFFF RAM
- 00200000-002FFFFF 4MB paged RAM
- 003F0000-003FFFFF I/O)
 
 
 Virtual Software

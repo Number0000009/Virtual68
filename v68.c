@@ -14,11 +14,21 @@
 
 
 static int logging = 0;
+
+#define NBANK 		4
+#define BANK_BASE 	0x002000000
+#define BANK_SIZE	(1024 * 1024)
+
+/* Low RAM memory - 512K for now */
 static uint8_t ram[512 * 1024];
+/* Banked memory - N8VEM 68K style for development */
+static uint8_t bankram[NBANK][BANK_SIZE];
+static uint8_t curbank;
+
 static struct ide_controller *ide;
 static uint8_t timer_v = 1;
 static uint32_t low;
-static uint8_t fc;
+uint8_t fc;
 
 #define IOBASE		0x00F00000
 #define IOIDE_START	0x00F01000
@@ -33,6 +43,8 @@ static uint8_t fc;
 #define SERIO_STATUS	0x00F03010
 
 #define TIMER_IO	0x00F04000
+
+#define BANK_IO		0x00F05000
 
 #define IRQ_MMU 	7
 #define IRQ_TIMER	6
@@ -179,6 +191,13 @@ static unsigned int translate(unsigned int addr, unsigned int is_wr)
 	}
 }
 
+static int bank_range(unsigned int addr, unsigned int len)
+{
+	if (addr >= BANK_BASE && addr + len <= BANK_BASE + BANK_SIZE)
+		return 1;
+	return 0;
+}
+
 /* CPU bus decodes */
 
 static unsigned int do_io_readb(unsigned int address)
@@ -223,6 +242,8 @@ static unsigned int do_io_readb(unsigned int address)
 		gettimeofday(&tv, NULL);
 		return tv.tv_usec/100000;
 	}
+	case BANK_IO:
+		return curbank;
 	}
 	/* bus error ? */
 	return 0xFF;
@@ -258,6 +279,9 @@ static void do_io_writeb(unsigned int address, unsigned int value)
 	case TIMER_IO:
 		timer_v = value;
 		break;
+	case BANK_IO:
+		curbank = value & (NBANK - 1);
+		break;
 	default: ;
 		/* bus error ? */
 	}
@@ -266,11 +290,15 @@ static void do_io_writeb(unsigned int address, unsigned int value)
 /* Read data from RAM, ROM, or a device */
 unsigned int cpu_read_byte(unsigned int address)
 {
+	address &= 0xFFFFFF;
+
 	if (!(fc & 4))
 		address = translate(address, 0);
 
 	if (address < sizeof(ram))
 		return ram[address];
+	if (bank_range(address, 1))
+		return bankram[curbank][address - BANK_BASE];
 	if (address >= IOBASE)
 		return do_io_readb(address);
 	/* Bus error ?? */
@@ -280,7 +308,11 @@ unsigned int cpu_read_byte(unsigned int address)
 
 unsigned int cpu_read_word(unsigned int address)
 {
-	unsigned int vaddress = address;
+	unsigned int vaddress;
+
+	address &= 0xFFFFFF;
+
+	vaddress = address;
 	/* We can do this as one because we know the address is even
 	   aligned so the two bytes translate adjacent */
 	if (!(fc & 4))
@@ -293,6 +325,8 @@ unsigned int cpu_read_word(unsigned int address)
 		}
 		return READ_WORD(ram, vaddress);
 	}
+	if (bank_range(address, 2))
+		return READ_WORD(bankram[curbank], vaddress - BANK_BASE);
 	if (address >= IOIDE_START && address <= IOIDE_END)
 		return ide_read16(ide, (address - IOIDE_START) / 2);
 	/* Corner cases */
@@ -320,6 +354,8 @@ void cpu_write_byte(unsigned int address, unsigned int value)
 		address = translate(address, 1);
 	if (address < sizeof(ram))
 		ram[address] = value;
+	else if (bank_range(address, 1))
+		bankram[curbank][address - BANK_BASE] = value;
 	else if (address >= IOBASE)
 		do_io_writeb(address, (value & 0xFF));
 	else
@@ -328,7 +364,11 @@ void cpu_write_byte(unsigned int address, unsigned int value)
 
 void cpu_write_word(unsigned int address, unsigned int value)
 {
-	unsigned int vaddress = address;
+	unsigned int vaddress;
+
+	address &= 0xFFFFFF;
+	vaddress = address;
+
 	/* We can do this as one because we know the address is even
 	   aligned so the two bytes translate adjacent */
 	if (!(fc & 4)) {
@@ -341,6 +381,8 @@ void cpu_write_word(unsigned int address, unsigned int value)
 	}
 	if (vaddress < sizeof(ram) - 1) {
 		WRITE_WORD(ram, vaddress, value);
+	} else if (bank_range(address, 1)) {
+		WRITE_WORD(bankram[curbank], address - BANK_BASE, value);
 	} else if (address >= IOIDE_START && address <= IOIDE_END)
 		ide_write16(ide, (address - IOIDE_START) / 2, value);
 	else {
@@ -352,12 +394,16 @@ void cpu_write_word(unsigned int address, unsigned int value)
 
 void cpu_write_long(unsigned int address, unsigned int value)
 {
+	address &= 0xFFFFFF;
+
 	cpu_write_word(address, value >> 16);
 	cpu_write_word(address + 2, value & 0xFFFF);
 }
 
 void cpu_write_pd(unsigned int address, unsigned int value)
 {
+	address &= 0xFFFFFF;
+
 	cpu_write_word(address + 2, value & 0xFFFF);
 	cpu_write_word(address, value >> 16);
 }
