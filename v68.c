@@ -322,9 +322,15 @@ unsigned int cpu_read_word(unsigned int address)
 		vaddress = translate(vaddress, 0);
 
 	if (vaddress < sizeof(ram) - 1) {
-		if (logging) {
-			fprintf(stderr, "RW %x/%x ", address, address - 0x20048);
-			fprintf(stderr,"=%x\n", READ_WORD(ram, vaddress));
+		if (logging && address >= 0x188FC) {
+			char buf[256];
+			fprintf(stderr, "RW %x/%x ", address, address - 0x188FC);
+			fprintf(stderr,"=%x [%x]", READ_WORD(ram, vaddress),
+				m68k_get_reg(NULL, M68K_REG_A7));
+			logging = 0;
+			m68k_disassemble(buf, address, M68K_CPU_TYPE_68000);
+			logging = 1;
+			fprintf(stderr, "%s\n", buf);
 		}
 		return READ_WORD(ram, vaddress);
 	}
@@ -486,6 +492,7 @@ int main(int argc, char* argv[])
 		term.c_lflag &= ~ICANON;
 		term.c_cc[VMIN] = 1;
 		term.c_cc[VTIME] = 0;
+		term.c_lflag &= ~(ECHO|ECHOE|ECHOK);
 		ioctl(0, TCSETS, &term);
 	}
 
