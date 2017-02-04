@@ -5,6 +5,9 @@
 #include <time.h>
 #include <sys/time.h>
 #include <sys/select.h>
+#include <signal.h>
+#include <termios.h>
+#include <sys/ioctl.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include "v68.h"
@@ -443,6 +446,20 @@ static void device_update(void)
 	}
 }
 
+static struct termios saved_term, term;
+
+static void cleanup(int sig)
+{
+	ioctl(0, TCSETS, &saved_term);
+	exit(1);
+}
+
+static void exit_cleanup(void)
+{
+	ioctl(0, TCSETS, &saved_term);
+}
+
+
 static void take_a_nap(void)
 {
 	struct timespec t;
@@ -460,6 +477,17 @@ void cpu_pulse_reset(void)
 int main(int argc, char* argv[])
 {
 	int fd;
+
+	if (ioctl(0, TCGETS, &term) == 0) {
+		saved_term = term;
+		atexit(exit_cleanup);
+		signal(SIGINT, cleanup);
+		signal(SIGQUIT, cleanup);
+		term.c_lflag &= ~ICANON;
+		term.c_cc[VMIN] = 1;
+		term.c_cc[VTIME] = 0;
+		ioctl(0, TCSETS, &term);
+	}
 
 	if (argc >= 2 && strcmp(argv[1], "-p") == 0) {
 		argv++;
