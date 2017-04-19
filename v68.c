@@ -495,6 +495,8 @@ int main(int argc, char* argv[])
 		term.c_lflag &= ~ICANON;
 		term.c_cc[VMIN] = 1;
 		term.c_cc[VTIME] = 0;
+		term.c_cc[VINTR] = 0;
+		term.c_cc[VEOF] = 0;
 		term.c_lflag &= ~(ECHO|ECHOE|ECHOK);
 		ioctl(0, TCSETS, &term);
 	}
