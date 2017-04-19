@@ -196,6 +196,9 @@ static unsigned int translate(unsigned int addr, unsigned int is_wr)
 
 static int bank_range(unsigned int addr, unsigned int len)
 {
+	/* Don't get confused by wraps at the top of memory */
+	if (addr + len < addr)
+		return 0;
 	if (addr >= BANK_BASE && addr + len <= BANK_BASE + BANK_SIZE)
 		return 1;
 	return 0;
