@@ -19,7 +19,7 @@
 static int logging = 0;
 
 #define NBANK 		4
-#define BANK_BASE 	0x002000000
+#define BANK_BASE 	0x00200000
 #define BANK_SIZE	(1024 * 1024)
 
 /* Low RAM memory - 512K for now */
@@ -160,6 +160,16 @@ static void mmu_trap(uint32_t addr, int is_wr)
 	}
 }
 
+static int bank_range(unsigned int addr, unsigned int len)
+{
+	/* Don't get confused by wraps at the top of memory */
+	if (addr + len < addr)
+		return 0;
+	if (addr >= BANK_BASE && addr + len <= BANK_BASE + BANK_SIZE)
+		return 1;
+	return 0;
+}
+
 static unsigned int translate(unsigned int addr, unsigned int is_wr)
 {
 	unsigned int pa = (addr & mmu_mask) ^ mmu_root;
@@ -167,7 +177,8 @@ static unsigned int translate(unsigned int addr, unsigned int is_wr)
 		/* Simple limits */
 		case 0:
 		default:
-			if (low && (addr < low || addr > sizeof(ram))) {
+			if (low && (addr < low || 
+				(addr > sizeof(ram) && !bank_range(addr,1)))) {
 				if (is_wr)
 					mmu_trap(addr, is_wr);
 				else
@@ -192,16 +203,6 @@ static unsigned int translate(unsigned int addr, unsigned int is_wr)
 			}
 			return addr;
 	}
-}
-
-static int bank_range(unsigned int addr, unsigned int len)
-{
-	/* Don't get confused by wraps at the top of memory */
-	if (addr + len < addr)
-		return 0;
-	if (addr >= BANK_BASE && addr + len <= BANK_BASE + BANK_SIZE)
-		return 1;
-	return 0;
 }
 
 /* CPU bus decodes */
@@ -287,6 +288,7 @@ static void do_io_writeb(unsigned int address, unsigned int value)
 		break;
 	case BANK_IO:
 		curbank = value & (NBANK - 1);
+		printf("[Bank %d]\n", curbank);
 		break;
 	default: ;
 		/* bus error ? */
@@ -337,7 +339,7 @@ unsigned int cpu_read_word(unsigned int address)
 		}
 		return READ_WORD(ram, vaddress);
 	}
-	if (bank_range(address, 2))
+	if (bank_range(vaddress, 2))
 		return READ_WORD(bankram[curbank], vaddress - BANK_BASE);
 	if (address >= IOIDE_START && address <= IOIDE_END)
 		return ide_read16(ide, (address - IOIDE_START) / 2);
@@ -383,17 +385,12 @@ void cpu_write_word(unsigned int address, unsigned int value)
 
 	/* We can do this as one because we know the address is even
 	   aligned so the two bytes translate adjacent */
-	if (!(fc & 4)) {
+	if (!(fc & 4))
 		vaddress = translate(vaddress, 1);
-		if (low && (address < low || address > sizeof(ram))) {
-			fprintf(stderr, "Write fault 0x%08X at 0x%08X\n",
-				address, REG_PC);
-			return;
-		}
-	}
+
 	if (vaddress < sizeof(ram) - 1) {
 		WRITE_WORD(ram, vaddress, value);
-	} else if (bank_range(address, 2)) {
+	} else if (bank_range(vaddress, 2)) {
 		WRITE_WORD(bankram[curbank], address - BANK_BASE, value);
 	} else if (address >= IOIDE_START && address <= IOIDE_END)
 		ide_write16(ide, (address - IOIDE_START) / 2, value);
