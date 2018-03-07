@@ -1,5 +1,5 @@
 #!/bin/sh
 m68k-linux-gnu-gcc -Wl,-Ttext=0 -nostdlib boot.S
-m68k-linux-gnu-objcopy a.out  -O binary --only-section=.text  a.bin
+m68k-linux-gnu-objcopy a.out  -O binary --only-section=.text --pad-to=0x1000  a.bin
 dd if=a.bin of=boot.dat conv=notrunc
 
