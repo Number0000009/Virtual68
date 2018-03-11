@@ -16,6 +16,7 @@ SERIN		equ	$00F03000
 SEROUT		equ	$00F03000
 SERSTAT		equ	$00F03010
 TIMERIO		equ	$00F04000
+DBGQUIT		equ	$00F06000
 
 MMUIRQ		equ	7
 TIMERIRQ	equ	6
@@ -337,6 +338,8 @@ command:
 		beq	cmd_boot
 		cmp.b	#'r',d0
 		beq	cmd_reset
+		cmp.b	#'q',d0
+		beq	cmd_quit
 		move.l	#badcmd,a3
 		bsr	strout
 		bra	command
@@ -444,6 +447,10 @@ cmd_reset:
 		bra	boot
 
 ignore:		rte
+
+		; Command Quit
+cmd_quit:
+		clr.b	DBGQUIT
 
 timer:
 		move.w	d0,-(sp)

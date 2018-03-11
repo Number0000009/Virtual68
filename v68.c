@@ -49,6 +49,8 @@ uint8_t fc;
 
 #define BANK_IO		0x00F05000
 
+#define DBG_QUIT	0x00F06000
+
 #define IRQ_MMU 	7
 #define IRQ_TIMER	6
 
@@ -297,6 +299,10 @@ static void do_io_writeb(unsigned int address, unsigned int value)
 	case BANK_IO:
 		curbank = value & (NBANK - 1);
 		printf("[Bank %d]\n", curbank);
+		break;
+	case DBG_QUIT:
+		printf("Quitting...\n");
+		exit(1);
 		break;
 	default: ;
 		/* bus error ? */
