@@ -17,7 +17,7 @@
 
 /* 16MB RAM except for the top 32K which is I/O */
 
-static uint8_t ram[(16 << 20) - 32768 ];
+static uint8_t ram[(16 << 20) - 32768];
 /* IDE controller */
 static struct ide_controller *ide;
 
@@ -38,7 +38,7 @@ uint8_t fc;
 #define WRITE_LONG(BASE, ADDR, VAL) (BASE)[ADDR] = ((VAL)>>24) & 0xff; \
 			(BASE)[(ADDR)+1] = ((VAL)>>16)&0xff; \
 			(BASE)[(ADDR)+2] = ((VAL)>>8)&0xff; \
-			(BASE)[(ADDR)+3] = (VAL)&0xff 
+			(BASE)[(ADDR)+3] = (VAL)&0xff
 
 
 /* Simple polled serial port */
@@ -48,7 +48,7 @@ static unsigned int check_chario(void)
 	fd_set i, o;
 	struct timeval tv;
 	unsigned int r = 0;
-	
+
 	FD_ZERO(&i);
 	FD_SET(0, &i);
 	FD_ZERO(&o);
@@ -178,7 +178,7 @@ static void duart_output(struct duart *d, int port, int value)
 
 static void duart_command(struct duart *d, int port, int value)
 {
-	switch((value & 0xE0)  >> 4) {
+	switch ((value & 0xE0) >> 4) {
 	case 0:
 		break;
 	case 1:
@@ -198,9 +198,9 @@ static void duart_command(struct duart *d, int port, int value)
 		duart_irq_calc(d);
 		break;
 	case 6:
-		break;	/* Literally start break */
+		break;		/* Literally start break */
 	case 7:
-		break;	/* Stop break */
+		break;		/* Stop break */
 	}
 	if (value & 1)
 		d->port[port].rxdis = 0;
@@ -216,8 +216,8 @@ static void duart_command(struct duart *d, int port, int value)
 static void duart_count(struct duart *d, int n)
 {
 	/* We are clocked at ??? so divide as needed */
-	uint16_t clock = 184; /* 1843200 so not entirely accurate
-	                         FIXME: we could track partial clocks */
+	uint16_t clock = 184;	/* 1843200 so not entirely accurate
+				   FIXME: we could track partial clocks */
 	if (n == 16)
 		clock /= 16;	/* Again needs accuracy sorting */
 
@@ -225,9 +225,9 @@ static void duart_count(struct duart *d, int n)
 	if (!(d->acr & 0x40))
 		if (d->ctstop)
 			return;
-	
+
 	d->ct -= clock;
-	while(d->ct < 0) {
+	while (d->ct < 0) {
 		d->ct += d->ctr;
 		duart_irq_raise(d, 0x08);
 	}
@@ -251,27 +251,27 @@ static void duart_tick(void)
 			duart_irq_raise(&duart, 0x10);
 		}
 	}
-	switch((duart.acr & 0x70) >> 4) {
+	switch ((duart.acr & 0x70) >> 4) {
 		/* Clock and timer modes */
-		case 0:	/* Counting IP2 */
-			break;
-		case 1: /* Counting TxCA */
-			break;
-		case 2: /* Counting TxCB */
-			break;
-		case 3: /* Counting EXT/x1 clock  / 16 */
-			duart_count(&duart, 16);
-			break;
-		case 4: /* Timer on IP2 */
-			break;
-		case 5: /* Timer on IP2/16 */
-			break;
-		case 6: /* Timer on X1/CLK */
-			duart_count(&duart, 1);
-			break;
-		case 7: /* Timer on X1/CLK / 16 */
-			duart_count(&duart, 16);
-			break;
+	case 0:		/* Counting IP2 */
+		break;
+	case 1:		/* Counting TxCA */
+		break;
+	case 2:		/* Counting TxCB */
+		break;
+	case 3:		/* Counting EXT/x1 clock  / 16 */
+		duart_count(&duart, 16);
+		break;
+	case 4:		/* Timer on IP2 */
+		break;
+	case 5:		/* Timer on IP2/16 */
+		break;
+	case 6:		/* Timer on X1/CLK */
+		duart_count(&duart, 1);
+		break;
+	case 7:		/* Timer on X1/CLK / 16 */
+		duart_count(&duart, 16);
+		break;
 	}
 }
 
@@ -292,47 +292,47 @@ static unsigned int duart_read(unsigned int address)
 {
 	if (!(address & 1))
 		return 0x00;
-	switch(address >> 1) {
-		case 0x00:	/* MR1A/MR2A */
-			if (duart.port[0].mrp)
-				return duart.port[0].mr2;
-			duart.port[0].mrp = 1;
-			return duart.port[0].mr1;
-		case 0x01:	/* SRA */
-			return duart.port[0].sr;
-		case 0x02:	/* BRG test */
-		case 0x03:	/* RHRA */
-			return duart_input(&duart, 0);
-		case 0x04:	/* IPCR */
-			return duart.ipcr;
-		case 0x05:	/* ISR */
-			return duart.isr;
-		case 0x06:	/* CTU */
-			return duart.ct >> 8;
-		case 0x07:	/* CTL */
-			return duart.ct & 0xFF;
-		case 0x08:	/* MR1B/MR2B */
-			if (duart.port[1].mrp)
-				return duart.port[1].mr2;
-			duart.port[1].mrp = 1;
-			return duart.port[1].mr1;
-		case 0x09:	/* SRB */
-			return duart.port[1].sr;
-		case 0x0A:	/* 1x/16x Test */
-		case 0x0B:	/* RHRB */
-			return duart_input(&duart, 1);
-		case 0x0C:	/* IVR */
-			return duart.ivr;
-		case 0x0D:	/* IP */
-			return 0xff; /* duart.ip; */
-		case 0x0E:	/* START */
-			duart.ct = duart.ctr;
-			duart.ctstop = 0;
-			return 0xFF;
-		case 0x0F:	/* STOP */
-			duart.ctstop = 1;
-			duart_irq_lower(&duart, 0x08);
-			return 0xFF;
+	switch (address >> 1) {
+	case 0x00:		/* MR1A/MR2A */
+		if (duart.port[0].mrp)
+			return duart.port[0].mr2;
+		duart.port[0].mrp = 1;
+		return duart.port[0].mr1;
+	case 0x01:		/* SRA */
+		return duart.port[0].sr;
+	case 0x02:		/* BRG test */
+	case 0x03:		/* RHRA */
+		return duart_input(&duart, 0);
+	case 0x04:		/* IPCR */
+		return duart.ipcr;
+	case 0x05:		/* ISR */
+		return duart.isr;
+	case 0x06:		/* CTU */
+		return duart.ct >> 8;
+	case 0x07:		/* CTL */
+		return duart.ct & 0xFF;
+	case 0x08:		/* MR1B/MR2B */
+		if (duart.port[1].mrp)
+			return duart.port[1].mr2;
+		duart.port[1].mrp = 1;
+		return duart.port[1].mr1;
+	case 0x09:		/* SRB */
+		return duart.port[1].sr;
+	case 0x0A:		/* 1x/16x Test */
+	case 0x0B:		/* RHRB */
+		return duart_input(&duart, 1);
+	case 0x0C:		/* IVR */
+		return duart.ivr;
+	case 0x0D:		/* IP */
+		return 0xff;	/* duart.ip; */
+	case 0x0E:		/* START */
+		duart.ct = duart.ctr;
+		duart.ctstop = 0;
+		return 0xFF;
+	case 0x0F:		/* STOP */
+		duart.ctstop = 1;
+		duart_irq_lower(&duart, 0x08);
+		return 0xFF;
 	}
 	return 0xFF;
 }
@@ -342,65 +342,65 @@ static void duart_write(unsigned int address, unsigned int value)
 	if (!(address & 1))
 		return;
 	value &= 0xFF;
-	switch(address >> 1) {
-		case 0x00:
-			if (duart.port[0].mrp)
-				duart.port[0].mr2 = value;
-			else
-				duart.port[0].mr1 = value;
-			break;
-		case 0x01:
-			duart.port[0].csr = value;
-			break;
-		case 0x02:
-			duart_command(&duart, 0, value);
-			break;
-		case 0x03:
-			duart_output(&duart, 0, value);
-			break;
-		case 0x04:
-			duart.acr = value;
-			duart_irq_calc(&duart);
-			break;
-		case 0x05:
-			duart.imr = value;
-			duart_irq_calc(&duart);
-			break;
-		case 0x06:
-			duart.ctr &=0xFF;
-			duart.ctr |= value << 8;
-			break;
-		case 0x07:
-			duart.ctr &= 0xFF00;
-			duart.ctr |= value;
-			break;
-		case 0x08:
-			if (duart.port[1].mrp)
-				duart.port[1].mr2 = value;
-			else
-				duart.port[1].mr1 = value;
-			break;
-		case 0x09:
-			duart.port[1].csr = value;
-			break;
-		case 0x0A:
-			duart_command(&duart, 1, value);
-			break;
-		case 0x0B:
-			duart_output(&duart, 1, value);
-			break;
-		case 0x0C:
-			duart.ivr = value;
-			break;
-		case 0x0D:
-			duart.opcr = value;
-			break;
-		case 0x0E:
-			duart.opcr |= value;
-			break;
-		case 0x0F:
-			duart.opcr &= ~value;
-			break;
+	switch (address >> 1) {
+	case 0x00:
+		if (duart.port[0].mrp)
+			duart.port[0].mr2 = value;
+		else
+			duart.port[0].mr1 = value;
+		break;
+	case 0x01:
+		duart.port[0].csr = value;
+		break;
+	case 0x02:
+		duart_command(&duart, 0, value);
+		break;
+	case 0x03:
+		duart_output(&duart, 0, value);
+		break;
+	case 0x04:
+		duart.acr = value;
+		duart_irq_calc(&duart);
+		break;
+	case 0x05:
+		duart.imr = value;
+		duart_irq_calc(&duart);
+		break;
+	case 0x06:
+		duart.ctr &= 0xFF;
+		duart.ctr |= value << 8;
+		break;
+	case 0x07:
+		duart.ctr &= 0xFF00;
+		duart.ctr |= value;
+		break;
+	case 0x08:
+		if (duart.port[1].mrp)
+			duart.port[1].mr2 = value;
+		else
+			duart.port[1].mr1 = value;
+		break;
+	case 0x09:
+		duart.port[1].csr = value;
+		break;
+	case 0x0A:
+		duart_command(&duart, 1, value);
+		break;
+	case 0x0B:
+		duart_output(&duart, 1, value);
+		break;
+	case 0x0C:
+		duart.ivr = value;
+		break;
+	case 0x0D:
+		duart.opcr = value;
+		break;
+	case 0x0E:
+		duart.opcr |= value;
+		break;
+	case 0x0F:
+		duart.opcr &= ~value;
+		break;
 	}
 }
 
@@ -424,15 +424,18 @@ static unsigned int do_io_readb(unsigned int address)
 		return 0xFF;
 	/* ATA CF */
 	/* FIXME: FFE010-01F sets CS1 */
-	if (address >= 0xFFE000 && address <= 0xFFEFFF) {
+	if (address >= 0xFFE000 && address <= 0xFFEFFF)
 		return ide_read8(ide, (address & 31) >> 1);
-	}
 	/* DUART */
 	return duart_read(address & 31);
 }
 
 static void do_io_writeb(unsigned int address, unsigned int value)
 {
+	if (address == 0xFFFFFF) {
+		printf("<%c>", value);
+		return;
+	}
 	/* SPI is not modelled */
 	if (address >= 0xFFD000 && address <= 0xFFDFFF)
 		return;
@@ -461,12 +464,12 @@ unsigned int cpu_read_word(unsigned int address)
 	if (address < sizeof(ram) - 1)
 		return READ_WORD(ram, address);
 	else if (address >= 0xFFE000 && address <= 0xFFEFFF)
-		return ide_read16(ide, (address & 31) >> 1); 
+		return ide_read16(ide, (address & 31) >> 1);
 	return (cpu_read_byte(address) << 8) | cpu_read_byte(address + 1);
 }
 
 unsigned int cpu_read_word_dasm(unsigned int address)
-{	
+{
 	return cpu_read_word(address);
 }
 
@@ -476,7 +479,7 @@ unsigned int cpu_read_long(unsigned int address)
 }
 
 unsigned int cpu_read_long_dasm(unsigned int address)
-{	
+{
 	return cpu_read_long(address);
 }
 
@@ -558,7 +561,7 @@ void cpu_pulse_reset(void)
 	device_init();
 }
 
-int main(int argc, char* argv[])
+int main(int argc, char *argv[])
 {
 	int fd;
 
@@ -569,17 +572,17 @@ int main(int argc, char* argv[])
 		signal(SIGQUIT, cleanup);
 		signal(SIGTSTP, SIG_IGN);
 		term.c_lflag &= ~ICANON;
-		term.c_iflag &= ~(ICRNL|IGNCR);
+		term.c_iflag &= ~(ICRNL | IGNCR);
 		term.c_cc[VMIN] = 1;
 		term.c_cc[VTIME] = 0;
 		term.c_cc[VINTR] = 0;
 		term.c_cc[VSUSP] = 0;
 		term.c_cc[VEOF] = 0;
-		term.c_lflag &= ~(ECHO|ECHOE|ECHOK);
+		term.c_lflag &= ~(ECHO | ECHOE | ECHOK);
 		tcsetattr(0, 0, &term);
 	}
 
-	if(argc > 2) {
+	if (argc > 2) {
 		fprintf(stderr, "Usage: tiny68k\n");
 		exit(-1);
 	}
@@ -595,7 +598,7 @@ int main(int argc, char* argv[])
 		exit(1);
 	}
 	close(fd);
-	
+
 	m68k_init();
 	m68k_set_cpu_type(M68K_CPU_TYPE_68000);
 	m68k_pulse_reset();
@@ -616,7 +619,7 @@ int main(int argc, char* argv[])
 
 	m68k_pulse_reset();
 
-	while(1) {
+	while (1) {
 		/* A 10MHz 68000 should do 1000 cycles per 1/10000th of a
 		   second. We do a blind 0.01 second sleep so we are actually
 		   emulating a bit under 10Mhz - which will do fine for
@@ -626,4 +629,3 @@ int main(int argc, char* argv[])
 		take_a_nap();
 	}
 }
-
