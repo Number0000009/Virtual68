@@ -202,6 +202,14 @@ static unsigned int translate(unsigned int addr, unsigned int is_wr)
 				return 0xFFFFFFFF;
 			}
 			return addr;
+		case 3:
+			/* For testing 683xx style chipselect memory
+			   protection */
+			if ((addr & mmu_mask) != mmu_mask) {
+				mmu_trap(addr, is_wr);
+				return 0xFFFFFFFF;
+			}
+			return addr;
 	}
 }
 
@@ -510,10 +518,14 @@ int main(int argc, char* argv[])
 		argv++;
 		mmu_type = 1;
 		argc--;
+	} else if (argc >= 2 && strcmp(argv[1], "-3") == 0) {
+		argv++;
+		mmu_type = 3;
+		argc--;
 	}
 
 	if(argc > 2) {
-		printf("Usage: v68 [-[p|l|s]] <program file>\n");
+		printf("Usage: v68 [-[p|l|s|3]] <program file>\n");
 		exit(-1);
 	}
 
